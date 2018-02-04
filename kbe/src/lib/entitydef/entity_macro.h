@@ -2,7 +2,7 @@
 This source file is part of KBEngine
 For the latest info, see http://www.kbengine.org/
 
-Copyright (c) 2008-2017 KBEngine.
+Copyright (c) 2008-2018 KBEngine.
 
 KBEngine is free software: you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
@@ -282,8 +282,7 @@ namespace KBEngine{
 #define ENTITY_FLAGS_DESTROYING			0x00000001
 #define ENTITY_FLAGS_INITING			0x00000002
 #define ENTITY_FLAGS_TELEPORT_START		0x00000004
-#define ENTITY_FLAGS_TELEPORT_ARRIVED	0x00000008
-#define ENTITY_FLAGS_TELEPORT_END		0x00000010
+#define ENTITY_FLAGS_TELEPORT_STOP		0x00000008
 
 #define ENTITY_HEADER(CLASS)																				\
 protected:																									\
@@ -331,7 +330,7 @@ public:																										\
 																											\
 		if(PyObject_SetAttrString(this, "__class__", (PyObject*)pScriptModule_->getScriptType()) == -1)		\
 		{																									\
-			WARNING_MSG(fmt::format("Base::reload: "														\
+			WARNING_MSG(fmt::format("Entity::reload: "														\
 				"{} {} could not change __class__ to new class!\n",											\
 				pScriptModule_->getName(), id_));															\
 			PyErr_Print();																					\
@@ -498,16 +497,16 @@ public:																										\
 		CLASS* entity = static_cast<CLASS*>(self);															\
 		DEBUG_REDUCE_EX(entity);																			\
 		PyObject* args = PyTuple_New(2);																	\
-		PyObject* unpickleMethod = script::Pickler::getUnpickleFunc("Mailbox");								\
+		PyObject* unpickleMethod = script::Pickler::getUnpickleFunc("EntityCall");							\
 		PyTuple_SET_ITEM(args, 0, unpickleMethod);															\
 		PyObject* args1 = PyTuple_New(4);																	\
 		PyTuple_SET_ITEM(args1, 0, PyLong_FromUnsignedLong(entity->id()));									\
 		PyTuple_SET_ITEM(args1, 1, PyLong_FromUnsignedLongLong(g_componentID));								\
 		PyTuple_SET_ITEM(args1, 2, PyLong_FromUnsignedLong(entity->pScriptModule()->getUType()));			\
 		if(g_componentType == BASEAPP_TYPE)																	\
-			PyTuple_SET_ITEM(args1, 3, PyLong_FromUnsignedLong(MAILBOX_TYPE_BASE));							\
+			PyTuple_SET_ITEM(args1, 3, PyLong_FromUnsignedLong(ENTITYCALL_TYPE_BASE));						\
 		else																								\
-			PyTuple_SET_ITEM(args1, 3, PyLong_FromUnsignedLong(MAILBOX_TYPE_CELL));							\
+			PyTuple_SET_ITEM(args1, 3, PyLong_FromUnsignedLong(ENTITYCALL_TYPE_CELL));						\
 		PyTuple_SET_ITEM(args, 1, args1);																	\
 																											\
 		if(unpickleMethod == NULL){																			\
@@ -597,7 +596,7 @@ public:																										\
 			if(iter != pPropertyDescrs_->end())																\
 			{																								\
 				char err[255];																				\
-				kbe_snprintf(err, 255, "property[%s] is in [%s] def. del failed.", ccattr, scriptName());	\
+				kbe_snprintf(err, 255, "property[%s] defined in %s.def, del failed!", ccattr, scriptName());\
 				PyErr_SetString(PyExc_TypeError, err);														\
 				PyErr_PrintEx(0);																			\
 				free(ccattr);																				\
@@ -608,7 +607,7 @@ public:																										\
 		if(pScriptModule_->findMethodDescription(ccattr, g_componentType) != NULL)							\
 		{																									\
 			char err[255];																					\
-			kbe_snprintf(err, 255, "method[%s] is in [%s] def. del failed.", ccattr, scriptName());			\
+			kbe_snprintf(err, 255, "method[%s] defined in %s.def, del failed!", ccattr, scriptName());		\
 			PyErr_SetString(PyExc_TypeError, err);															\
 			PyErr_PrintEx(0);																				\
 			free(ccattr);																					\
@@ -688,8 +687,8 @@ public:																										\
 			(g_componentType == BASEAPP_TYPE && currargsSize > 3))											\
 		{																									\
 			PyErr_Format(PyExc_AssertionError,																\
-							"%s: args max require %d args, gived %d! is script[%s].\n",						\
-				__FUNCTION__, 1, currargsSize, pobj->scriptName());											\
+							"%s::writeToDB: args max require %d args, gived %d!\n",							\
+				pobj->scriptName(), 1, currargsSize);														\
 																											\
 			PyErr_PrintEx(0);																				\
 			S_Return;																						\
@@ -721,7 +720,7 @@ public:																										\
 			{																								\
 				if(PyArg_ParseTuple(args, "O", &pycallback) == -1)											\
 				{																							\
-					PyErr_Format(PyExc_AssertionError, "KBEngine::writeToDB: args error!");					\
+					PyErr_Format(PyExc_AssertionError, "%s::writeToDB: args error!", pobj->scriptName());	\
 					PyErr_PrintEx(0);																		\
 					pycallback = NULL;																		\
 					S_Return;																				\
@@ -731,7 +730,7 @@ public:																										\
 				{																							\
 					if(pycallback != Py_None)																\
 					{																						\
-						PyErr_Format(PyExc_TypeError, "KBEngine::writeToDB: args1 not is callback!");		\
+						PyErr_Format(PyExc_TypeError, "%s::writeToDB: args1 not is callback!", pobj->scriptName());\
 						PyErr_PrintEx(0);																	\
 						S_Return;																			\
 					}																						\
@@ -745,7 +744,7 @@ public:																										\
 			{																								\
 				if(PyArg_ParseTuple(args, "i", &extra) == -1)												\
 				{																							\
-					PyErr_Format(PyExc_AssertionError, "KBEngine::writeToDB: args error!");					\
+					PyErr_Format(PyExc_AssertionError, "%s::writeToDB: args error!", pobj->scriptName());	\
 					PyErr_PrintEx(0);																		\
 					pycallback = NULL;																		\
 					S_Return;																				\
@@ -758,7 +757,7 @@ public:																										\
 			{																								\
 				if(PyArg_ParseTuple(args, "O|i", &pycallback, &extra) == -1)								\
 				{																							\
-					PyErr_Format(PyExc_AssertionError, "KBEngine::writeToDB: args error!");					\
+					PyErr_Format(PyExc_AssertionError, "%s::writeToDB: args error!", pobj->scriptName());	\
 					PyErr_PrintEx(0);																		\
 					pycallback = NULL;																		\
 					S_Return;																				\
@@ -768,7 +767,7 @@ public:																										\
 				{																							\
 					if(pycallback != Py_None)																\
 					{																						\
-						PyErr_Format(PyExc_TypeError, "KBEngine::writeToDB: args1 not is callback!");		\
+						PyErr_Format(PyExc_TypeError, "%s::writeToDB: args1 not is callback!", pobj->scriptName());	\
 						PyErr_PrintEx(0);																	\
 						S_Return;																			\
 					}																						\
@@ -783,7 +782,7 @@ public:																										\
 				PyObject* pystr_extra = NULL;																\
 				if(PyArg_ParseTuple(args, "i|O", &extra, &pystr_extra) == -1)								\
 				{																							\
-					PyErr_Format(PyExc_AssertionError, "KBEngine::writeToDB: args error!");					\
+					PyErr_Format(PyExc_AssertionError, "%s::writeToDB: args error!", pobj->scriptName());	\
 					PyErr_PrintEx(0);																		\
 					pycallback = NULL;																		\
 					S_Return;																				\
@@ -800,9 +799,9 @@ public:																										\
 																											\
 				if(!g_kbeSrvConfig.dbInterface(strextra))													\
 				{																							\
-					PyErr_Format(PyExc_TypeError, "KBEngine::writeToDB: args2, "							\
+					PyErr_Format(PyExc_TypeError, "%s::writeToDB: args2, "									\
 													"incorrect dbInterfaceName(%s)!",						\
-													strextra.c_str());										\
+													pobj->scriptName(), strextra.c_str());					\
 					PyErr_PrintEx(0);																		\
 					S_Return;																				\
 				}																							\
@@ -815,7 +814,7 @@ public:																										\
 				PyObject* pystr_extra = NULL;																\
 				if(PyArg_ParseTuple(args, "O|i|O", &pycallback, &extra, &pystr_extra) == -1)				\
 				{																							\
-					PyErr_Format(PyExc_AssertionError, "KBEngine::writeToDB: args error!");					\
+					PyErr_Format(PyExc_AssertionError, "%s::writeToDB: args error!", pobj->scriptName());	\
 					PyErr_PrintEx(0);																		\
 					pycallback = NULL;																		\
 					S_Return;																				\
@@ -825,7 +824,7 @@ public:																										\
 				{																							\
 					if(pycallback != Py_None)																\
 					{																						\
-						PyErr_Format(PyExc_TypeError, "KBEngine::writeToDB: args1 not is callback!");		\
+						PyErr_Format(PyExc_TypeError, "%s::writeToDB: args1 not is callback!", pobj->scriptName());	\
 						PyErr_PrintEx(0);																	\
 						S_Return;																			\
 					}																						\
@@ -846,9 +845,9 @@ public:																										\
 																											\
 				if(!g_kbeSrvConfig.dbInterface(strextra))													\
 				{																							\
-					PyErr_Format(PyExc_TypeError, "KBEngine::writeToDB: args3, "							\
+					PyErr_Format(PyExc_TypeError, "%s::writeToDB: args3, "									\
 										"incorrect dbInterfaceName(%s)!",									\
-											strextra.c_str());												\
+											pobj->scriptName(), strextra.c_str());							\
 					PyErr_PrintEx(0);																		\
 					S_Return;																				\
 				}																							\

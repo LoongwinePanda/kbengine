@@ -2,7 +2,7 @@
 This source file is part of KBEngine
 For the latest info, see http://www.kbengine.org/
 
-Copyright (c) 2008-2017 KBEngine.
+Copyright (c) 2008-2018 KBEngine.
 
 KBEngine is free software: you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
@@ -104,7 +104,7 @@ void ServerApp::shutDown(float shutdowntime)
 	}
 	else
 	{
-		ERROR_MSG(fmt::format("ServerApp::shutDown:  In shuttingdown!\n"));
+		WARNING_MSG(fmt::format("ServerApp::shutDown:  In shuttingdown!\n"));
 		return;
 	}
 	
@@ -152,10 +152,10 @@ bool ServerApp::installSignals()
 //-------------------------------------------------------------------------------------		
 bool ServerApp::initialize()
 {
-	if(!initThreadPool())
+	if (!installSignals())
 		return false;
 
-	if(!installSignals())
+	if(!initThreadPool())
 		return false;
 	
 	if(!loadConfig())
@@ -168,6 +168,10 @@ bool ServerApp::initialize()
 		return false;
 
 	bool ret = initializeEnd();
+
+	// 最后仍然需要设置一次，避免期间被其他第三方库修改
+	if (!installSignals())
+		return false;
 
 #ifdef ENABLE_WATCHERS
 	return ret && initializeWatcher();
@@ -264,7 +268,7 @@ void ServerApp::handleTimeout(TimerHandle, void * arg)
 //-------------------------------------------------------------------------------------
 void ServerApp::handleTimers()
 {
-	AUTO_SCOPED_PROFILE("callTimers");
+	AUTO_SCOPED_PROFILE("callScriptTimers");
 	timers().process(g_kbetime);
 }
 
@@ -437,6 +441,8 @@ void ServerApp::onAppActiveTick(Network::Channel* pChannel, COMPONENT_TYPE compo
 		if(pChannel->isExternal())
 			return;
 	
+	pChannel->updateLastReceivedTime();
+	
 	if(componentType != CONSOLE_TYPE && componentType != CLIENT_TYPE)
 	{
 		Components::ComponentInfos* cinfos = 
@@ -451,10 +457,6 @@ void ServerApp::onAppActiveTick(Network::Channel* pChannel, COMPONENT_TYPE compo
 		}
 
 		cinfos->pChannel->updateLastReceivedTime();
-	}
-	else
-	{
-		pChannel->updateLastReceivedTime();
 	}
 
 	//DEBUG_MSG("ServerApp::onAppActiveTick[%x]: %s:%"PRAppID" lastReceivedTime:%"PRIu64" at %s.\n", 
@@ -478,7 +480,7 @@ void ServerApp::lookApp(Network::Channel* pChannel)
 	if(pChannel->isExternal())
 		return;
 
-	DEBUG_MSG(fmt::format("ServerApp::lookApp: {}, componentID={}\n", pChannel->c_str(), g_componentID));
+	//DEBUG_MSG(fmt::format("ServerApp::lookApp: {}, componentID={}\n", pChannel->c_str(), g_componentID));
 
 	Network::Bundle* pBundle = Network::Bundle::createPoolObject();
 	
@@ -490,7 +492,7 @@ void ServerApp::lookApp(Network::Channel* pChannel)
 	(*pBundle) << istate;
 
 	pChannel->send(pBundle);
-	DEBUG_MSG(fmt::format("ServerApp::lookApp: response! componentID={}\n", g_componentID));
+	//DEBUG_MSG(fmt::format("ServerApp::lookApp: response! componentID={}\n", g_componentID));
 }
 
 //-------------------------------------------------------------------------------------

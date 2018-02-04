@@ -2,7 +2,7 @@
 This source file is part of KBEngine
 For the latest info, see http://www.kbengine.org/
 
-Copyright (c) 2008-2017 KBEngine.
+Copyright (c) 2008-2018 KBEngine.
 
 KBEngine is free software: you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
@@ -24,7 +24,7 @@ along with KBEngine.  If not, see <http://www.gnu.org/licenses/>.
 #include "config.h"
 #include "clientobjectbase.h"
 #include "moveto_point_handler.h"	
-#include "entitydef/entity_mailbox.h"
+#include "entitydef/entity_call.h"
 #include "network/channel.h"	
 #include "network/bundle.h"	
 #include "network/fixed_messages.h"
@@ -51,9 +51,9 @@ SCRIPT_MEMBER_DECLARE_BEGIN(Entity)
 SCRIPT_MEMBER_DECLARE_END()
 
 CLIENT_ENTITY_GETSET_DECLARE_BEGIN(Entity)
-SCRIPT_GET_DECLARE("base",							pyGetBaseMailbox,				0,					0)
-SCRIPT_GET_DECLARE("cell",							pyGetCellMailbox,				0,					0)
-SCRIPT_GET_DECLARE("clientapp",						pyGetClientApp	,				0,					0)
+SCRIPT_GET_DECLARE("base",							pyGetBaseEntityCall,			0,					0)
+SCRIPT_GET_DECLARE("cell",							pyGetCellEntityCall,			0,					0)
+SCRIPT_GET_DECLARE("clientapp",						pyGetClientApp,					0,					0)
 SCRIPT_GETSET_DECLARE("position",					pyGetPosition,					pySetPosition,		0,		0)
 SCRIPT_GETSET_DECLARE("direction",					pyGetDirection,					pySetDirection,		0,		0)
 SCRIPT_GETSET_DECLARE("velocity",					pyGetMoveSpeed,					pySetMoveSpeed,		0,		0)
@@ -61,11 +61,11 @@ CLIENT_ENTITY_GETSET_DECLARE_END()
 BASE_SCRIPT_INIT(Entity, 0, 0, 0, 0, 0)	
 	
 //-------------------------------------------------------------------------------------
-Entity::Entity(ENTITY_ID id, const ScriptDefModule* pScriptModule, EntityMailbox* base, EntityMailbox* cell):
+Entity::Entity(ENTITY_ID id, const ScriptDefModule* pScriptModule, EntityCall* base, EntityCall* cell):
 ScriptObject(getScriptType(), true),
 ENTITY_CONSTRUCTION(Entity),
-cellMailbox_(cell),
-baseMailbox_(base),
+cellEntityCall_(cell),
+baseEntityCall_(base),
 position_(),
 serverPosition_(),
 direction_(),
@@ -77,7 +77,8 @@ velocity_(3.0f),
 enterworld_(false),
 isOnGround_(true),
 pMoveHandlerID_(0),
-inited_(false)
+inited_(false),
+isControlled_(false)
 {
 	ENTITY_INIT_PROPERTYS(Entity);
 	script::PyGC::incTracing("Entity");
@@ -88,8 +89,8 @@ Entity::~Entity()
 {
 	enterworld_ = false;
 	ENTITY_DECONSTRUCTION(Entity);
-	S_RELEASE(cellMailbox_);
-	S_RELEASE(baseMailbox_);
+	S_RELEASE(cellEntityCall_);
+	S_RELEASE(baseEntityCall_);
 
 	script::PyGC::decTracing("Entity");
 	
@@ -111,25 +112,25 @@ void Entity::pClientApp(ClientObjectBase* p)
 }
 
 //-------------------------------------------------------------------------------------
-PyObject* Entity::pyGetBaseMailbox()
+PyObject* Entity::pyGetBaseEntityCall()
 { 
-	EntityMailbox* mailbox = baseMailbox();
-	if(mailbox == NULL)
+	EntityCall* entitycall = baseEntityCall();
+	if(entitycall == NULL)
 		S_Return;
 
-	Py_INCREF(mailbox);
-	return mailbox; 
+	Py_INCREF(entitycall);
+	return entitycall; 
 }
 
 //-------------------------------------------------------------------------------------
-PyObject* Entity::pyGetCellMailbox()
+PyObject* Entity::pyGetCellEntityCall()
 { 
-	EntityMailbox* mailbox = cellMailbox();
-	if(mailbox == NULL)
+	EntityCall* entitycall = cellEntityCall();
+	if(entitycall == NULL)
 		S_Return;
 
-	Py_INCREF(mailbox);
-	return mailbox; 
+	Py_INCREF(entitycall);
+	return entitycall; 
 }
 
 //-------------------------------------------------------------------------------------
@@ -278,6 +279,7 @@ void Entity::onUpdatePropertys(MemoryStream& s)
 			s >> pos.x >> pos.y >> pos.z;
 #endif
 			position(pos);
+            clientPos(pos);
 			continue;
 		}
 		else if(uid == diruid)
@@ -300,6 +302,7 @@ void Entity::onUpdatePropertys(MemoryStream& s)
 #endif
 
 			direction(dir);
+            clientDir(dir);
 			continue;
 		}
 		else if(uid == spaceuid)
@@ -480,6 +483,7 @@ void Entity::onLeaveWorld()
 //-------------------------------------------------------------------------------------
 void Entity::onEnterSpace()
 {
+	this->stopMove();
 	SCOPED_PROFILE(SCRIPTCALL_PROFILE);
 	SCRIPT_OBJECT_CALL_ARGS0(this, const_cast<char*>("onEnterSpace"));
 }
@@ -490,6 +494,7 @@ void Entity::onLeaveSpace()
 	SCOPED_PROFILE(SCRIPTCALL_PROFILE);
 	spaceID(0);
 	SCRIPT_OBJECT_CALL_ARGS0(this, const_cast<char*>("onLeaveSpace"));
+	this->stopMove();
 }
 
 //-------------------------------------------------------------------------------------
@@ -792,6 +797,15 @@ void Entity::onTimer(ScriptID timerID, int useraAgs)
 		Py_DECREF(pyResult);
 	else
 		SCRIPT_ERROR_CHECK();
+}
+
+//-------------------------------------------------------------------------------------
+void Entity::onControlled(bool p_controlled)
+{
+    isControlled_ = p_controlled;
+
+    PyObject *pyval = p_controlled ? Py_True : Py_False;
+    SCRIPT_OBJECT_CALL_ARGS1(this, const_cast<char*>("onControlled"), const_cast<char*>("O"), pyval);
 }
 
 //-------------------------------------------------------------------------------------

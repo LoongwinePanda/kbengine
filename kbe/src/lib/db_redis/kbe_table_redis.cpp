@@ -2,7 +2,7 @@
 This source file is part of KBEngine
 For the latest info, see http://www.kbengine.org/
 
-Copyright (c) 2008-2017 KBEngine.
+Copyright (c) 2008-2018 KBEngine.
 
 KBEngine is free software: you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
@@ -107,6 +107,45 @@ bool KBEEntityLogTableRedis::eraseEntityLog(DBInterface * pdbi, DBID dbid, ENTIT
 //-------------------------------------------------------------------------------------
 KBEEntityLogTableRedis::KBEEntityLogTableRedis(EntityTables* pEntityTables) :
 KBEEntityLogTable(pEntityTables)
+{
+}
+
+
+//-------------------------------------------------------------------------------------
+bool KBEServerLogTableRedis::syncToDB(DBInterface* pdbi)
+{
+	return true;
+}
+
+//-------------------------------------------------------------------------------------
+bool KBEServerLogTableRedis::updateServer(DBInterface * pdbi)
+{
+	return true;
+}
+
+//-------------------------------------------------------------------------------------
+bool KBEServerLogTableRedis::queryServer(DBInterface * pdbi, ServerLog& serverlog)
+{
+	return true;
+}
+
+//-------------------------------------------------------------------------------------
+std::vector<COMPONENT_ID> KBEServerLogTableRedis::queryTimeOutServers(DBInterface * pdbi)
+{
+	std::vector<COMPONENT_ID> cids;
+
+	return cids;
+}
+
+//-------------------------------------------------------------------------------------
+bool KBEServerLogTableRedis::clearTimeoutLogs(DBInterface * pdbi, const std::vector<COMPONENT_ID>& cids)
+{
+	return true;
+}
+
+//-------------------------------------------------------------------------------------
+KBEServerLogTableRedis::KBEServerLogTableRedis(EntityTables* pEntityTables):
+KBEServerLogTable(pEntityTables)
 {
 }
 

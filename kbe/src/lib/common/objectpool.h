@@ -2,7 +2,7 @@
 This source file is part of KBEngine
 For the latest info, see http://www.kbengine.org/
 
-Copyright (c) 2008-2017 KBEngine.
+Copyright (c) 2008-2018 KBEngine.
 
 KBEngine is free software: you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
@@ -265,7 +265,7 @@ public:
 		pMutex_->lockMutex();
 
 		sprintf(buf, "ObjectPool::c_str(): name=%s, objs=%d/%d, isDestroyed=%s.\n", 
-			name_.c_str(), (int)obj_count_, (int)max_, (isDestroyed ? "true" : "false"));
+			name_.c_str(), (int)obj_count_, (int)max_, (isDestroyed() ? "true" : "false"));
 
 		pMutex_->unlockMutex();
 

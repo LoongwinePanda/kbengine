@@ -2,7 +2,7 @@
 This source file is part of KBEngine
 For the latest info, see http://www.kbengine.org/
 
-Copyright (c) 2008-2017 KBEngine.
+Copyright (c) 2008-2018 KBEngine.
 
 KBEngine is free software: you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
@@ -240,10 +240,27 @@ public:
 		return atof(strutil::kbe_trim(ptext->Value()).c_str());
 	}
 
+	bool getBool(const TiXmlNode* node)
+	{
+		std::string s = strutil::toUpper(getValStr(node));
+
+		if (s == "TRUE")
+		{
+			return true;
+		}
+		else if (s == "FALSE")
+		{
+			return false;
+		}
+
+		return getValInt(node) > 0;
+	}
+
 protected:
 	TiXmlDocument* txdoc_;
 	TiXmlElement* rootElement_;
 	bool isGood_;
+
 };
 
 }

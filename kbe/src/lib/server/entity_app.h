@@ -2,7 +2,7 @@
 This source file is part of KBEngine
 For the latest info, see http://www.kbengine.org/
 
-Copyright (c) 2008-2017 KBEngine.
+Copyright (c) 2008-2018 KBEngine.
 
 KBEngine is free software: you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
@@ -43,7 +43,7 @@ along with KBEngine.  If not, see <http://www.gnu.org/licenses/>.
 #include "server/callbackmgr.h"	
 #include "entitydef/entitydef.h"
 #include "entitydef/entities.h"
-#include "entitydef/entity_mailbox.h"
+#include "entitydef/entity_call.h"
 #include "entitydef/scriptdef_module.h"
 #include "network/message_handler.h"
 #include "resmgr/resmgr.h"
@@ -92,15 +92,15 @@ public:
 	virtual bool destroyEntity(ENTITY_ID entityID, bool callScript);
 
 	/**
-		由mailbox来尝试获取一个entity的实例
+		由entitycall来尝试获取一个entity的实例
 		因为这个组件上不一定存在这个entity。
 	*/
-	PyObject* tryGetEntityByMailbox(COMPONENT_ID componentID, ENTITY_ID eid);
+	PyObject* tryGetEntityByEntityCall(COMPONENT_ID componentID, ENTITY_ID eid);
 
 	/**
-		由mailbox来尝试获取一个channel的实例
+		由entitycall来尝试获取一个channel的实例
 	*/
-	Network::Channel* findChannelByMailbox(EntityMailbox& mailbox);
+	Network::Channel* findChannelByEntityCall(EntityCall& entitycall);
 
 	KBEngine::script::Script& getScript(){ return script_; }
 	PyObjectPtr getEntryScript(){ return entryScript_; }
@@ -171,6 +171,11 @@ public:
 	*/
 	virtual void startProfile_(Network::Channel* pChannel, std::string profileName, int8 profileType, uint32 timelen);
 
+	/**
+		允许脚本assert底层
+	*/
+	static PyObject* __py_assert(PyObject* self, PyObject* args);
+	
 	/**
 		获取apps发布状态, 可在脚本中获取该值
 	*/
@@ -273,12 +278,12 @@ load_(0.f)
 	ScriptTimers::initialize(*this);
 	idClient_.pApp(this);
 
-	// 初始化mailbox模块获取entity实体函数地址
-	EntityMailbox::setGetEntityFunc(std::tr1::bind(&EntityApp<E>::tryGetEntityByMailbox, this, 
+	// 初始化entitycall模块获取entity实体函数地址
+	EntityCall::setGetEntityFunc(std::tr1::bind(&EntityApp<E>::tryGetEntityByEntityCall, this, 
 		std::tr1::placeholders::_1, std::tr1::placeholders::_2));
 
-	// 初始化mailbox模块获取channel函数地址
-	EntityMailbox::setFindChannelFunc(std::tr1::bind(&EntityApp<E>::findChannelByMailbox, this, 
+	// 初始化entitycall模块获取channel函数地址
+	EntityCall::setFindChannelFunc(std::tr1::bind(&EntityApp<E>::findChannelByEntityCall, this, 
 		std::tr1::placeholders::_1));
 }
 
@@ -407,15 +412,19 @@ bool EntityApp<E>::installPyScript()
 	pyPaths += user_scripts_path + L"data;";
 	pyPaths += user_scripts_path + L"user_type;";
 
-	switch(componentType_)
+	switch (componentType_)
 	{
 	case BASEAPP_TYPE:
 		pyPaths += user_scripts_path + L"server_common;";
 		pyPaths += user_scripts_path + L"base;";
+		pyPaths += user_scripts_path + L"base/interfaces;";
+		pyPaths += user_scripts_path + L"base/components;";
 		break;
 	case CELLAPP_TYPE:
 		pyPaths += user_scripts_path + L"server_common;";
 		pyPaths += user_scripts_path + L"cell;";
+		pyPaths += user_scripts_path + L"cell/interfaces;";
+		pyPaths += user_scripts_path + L"cell/components;";
 		break;
 	case DBMGR_TYPE:
 		pyPaths += user_scripts_path + L"server_common;";
@@ -423,6 +432,8 @@ bool EntityApp<E>::installPyScript()
 		break;
 	default:
 		pyPaths += user_scripts_path + L"client;";
+		pyPaths += user_scripts_path + L"client/interfaces;";
+		pyPaths += user_scripts_path + L"client/components;";
 		break;
 	};
 	
@@ -464,8 +475,11 @@ bool EntityApp<E>::installPyModules()
 	// 添加globalData, globalBases支持
 	pGlobalData_ = new GlobalDataClient(DBMGR_TYPE, GlobalDataServer::GLOBAL_DATA);
 	registerPyObjectToScript("globalData", pGlobalData_);
-
+	
 	// 注册创建entity的方法到py
+	// 允许assert底层，用于调试脚本某个时机时底层状态
+	APPEND_SCRIPT_MODULE_METHOD(getScript().getModule(),	kbassert,			__py_assert,							METH_VARARGS,	0);
+	
 	// 向脚本注册app发布状态
 	APPEND_SCRIPT_MODULE_METHOD(getScript().getModule(),	publish,			__py_getAppPublish,						METH_VARARGS,	0);
 
@@ -687,14 +701,14 @@ void EntityApp<E>::onSignalled(int sigNum)
 }
 
 template<class E>
-PyObject* EntityApp<E>::tryGetEntityByMailbox(COMPONENT_ID componentID, ENTITY_ID eid)
+PyObject* EntityApp<E>::tryGetEntityByEntityCall(COMPONENT_ID componentID, ENTITY_ID eid)
 {
 	if(componentID != componentID_)
 		return NULL;
 	
 	E* entity = pEntities_->find(eid);
 	if(entity == NULL){
-		ERROR_MSG(fmt::format("EntityApp::tryGetEntityByMailbox: can't found entity:{}.\n", eid));
+		ERROR_MSG(fmt::format("EntityApp::tryGetEntityByEntityCall: can't found entity:{}.\n", eid));
 		return NULL;
 	}
 
@@ -702,20 +716,20 @@ PyObject* EntityApp<E>::tryGetEntityByMailbox(COMPONENT_ID componentID, ENTITY_I
 }
 
 template<class E>
-Network::Channel* EntityApp<E>::findChannelByMailbox(EntityMailbox& mailbox)
+Network::Channel* EntityApp<E>::findChannelByEntityCall(EntityCall& entitycall)
 {
 	// 如果组件ID大于0则查找组件
-	if(mailbox.componentID() > 0)
+	if(entitycall.componentID() > 0)
 	{
 		Components::ComponentInfos* cinfos = 
-			Components::getSingleton().findComponent(mailbox.componentID());
+			Components::getSingleton().findComponent(entitycall.componentID());
 
 		if(cinfos != NULL && cinfos->pChannel != NULL)
 			return cinfos->pChannel; 
 	}
 	else
 	{
-		return Components::getSingleton().pNetworkInterface()->findChannel(mailbox.addr());
+		return Components::getSingleton().pNetworkInterface()->findChannel(entitycall.addr());
 	}
 
 	return NULL;
@@ -781,6 +795,13 @@ void EntityApp<E>::onReqAllocEntityID(Network::Channel* pChannel, ENTITY_ID star
 	
 	// INFO_MSG("EntityApp::onReqAllocEntityID: entityID alloc(%d-%d).\n", startID, endID);
 	idClient_.onAddRange(startID, endID);
+}
+
+template<class E>
+PyObject* EntityApp<E>::__py_assert(PyObject* self, PyObject* args)
+{
+	KBE_ASSERT(false && "kbassert");
+	return NULL;
 }
 
 template<class E>
@@ -1417,7 +1438,7 @@ void EntityApp<E>::updateLoad()
 	double spareTime = 1.0;
 	if (lastTickInStamps != 0)
 	{
-		spareTime = double(dispatcher_.getSpareTime())/double(lastTickInStamps);
+		spareTime = double(dispatcher_.getSpareTime()) / double(lastTickInStamps);
 	}
 
 	dispatcher_.clearSpareTime();
@@ -1458,8 +1479,8 @@ void EntityApp<E>::calcLoad(float spareTime)
 template<class E>
 void EntityApp<E>::onReloadScript(bool fullReload)
 {
-	EntityMailbox::MAILBOXS::iterator iter =  EntityMailbox::mailboxs.begin();
-	for(; iter != EntityMailbox::mailboxs.end(); ++iter)
+	EntityCall::ENTITYCALLS::iterator iter = EntityCall::entityCalls.begin();
+	for(; iter != EntityCall::entityCalls.end(); ++iter)
 	{
 		(*iter)->reload();
 	}

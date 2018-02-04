@@ -2,7 +2,7 @@
 This source file is part of KBEngine
 For the latest info, see http://www.kbengine.org/
 
-Copyright (c) 2008-2017 KBEngine.
+Copyright (c) 2008-2018 KBEngine.
 
 KBEngine is free software: you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
@@ -20,8 +20,7 @@ along with KBEngine.  If not, see <http://www.gnu.org/licenses/>.
 
 #ifndef KBE_CELLAPP_H
 #define KBE_CELLAPP_H
-	
-// common include	
+
 #include "entity.h"
 #include "spaces.h"
 #include "cells.h"
@@ -123,7 +122,7 @@ public:
 	/** 网络接口
 		baseEntity请求创建在一个新的space中
 	*/
-	void onCreateInNewSpaceFromBaseapp(Network::Channel* pChannel, KBEngine::MemoryStream& s);
+	void onCreateCellEntityInNewSpaceFromBaseapp(Network::Channel* pChannel, KBEngine::MemoryStream& s);
 
 	/** 网络接口
 		baseEntity请求创建在一个新的space中
@@ -154,9 +153,9 @@ public:
 	void onDestroyCellEntityFromBaseapp(Network::Channel* pChannel, ENTITY_ID eid);
 
 	/** 网络接口
-		entity收到一封mail, 由某个app上的mailbox发起
+		entity收到远程call请求, 由某个app上的entitycall发起
 	*/
-	void onEntityMail(Network::Channel* pChannel, KBEngine::MemoryStream& s);
+	void onEntityCall(Network::Channel* pChannel, KBEngine::MemoryStream& s);
 	
 	/** 网络接口
 		client访问entity的cell方法由baseapp转发
@@ -211,9 +210,9 @@ public:
 	bool removeUpdatable(Updatable* pObject);
 
 	/**
-		hook mailboxcall
+		hook entitycallcall
 	*/
-	RemoteEntityMethod* createMailboxCallEntityRemoteMethod(MethodDescription* pMethodDescription, EntityMailbox* pMailbox);
+	RemoteEntityMethod* createEntityCallCallEntityRemoteMethod(MethodDescription* pMethodDescription, EntityCall* pEntityCall);
 
 	/** 网络接口
 		某个app请求查看该app
@@ -245,6 +244,7 @@ public:
 	*/
 	void reqTeleportToCellApp(Network::Channel* pChannel, MemoryStream& s);
 	void reqTeleportToCellAppCB(Network::Channel* pChannel, MemoryStream& s);
+	void reqTeleportToCellAppOver(Network::Channel* pChannel, MemoryStream& s);
 
 	/**
 		获取和设置ghost管理器

@@ -2,7 +2,7 @@
 This source file is part of KBEngine
 For the latest info, see http://www.kbengine.org/
 
-Copyright (c) 2008-2017 KBEngine.
+Copyright (c) 2008-2018 KBEngine.
 
 KBEngine is free software: you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
@@ -35,9 +35,14 @@ Spaces::~Spaces()
 //-------------------------------------------------------------------------------------
 void Spaces::finalise()
 {
-	SPACES::iterator iter = spaces_.begin();
-	for(;iter != spaces_.end(); ++iter)
-		iter->second->destroy(0);
+	Spaces::SPACES spaces = spaces_;
+	while (spaces.size() > 0)
+	{
+		SPACES::iterator iter = spaces.begin();
+		KBEShared_ptr<Space> pSpace = iter->second;
+		spaces.erase(iter++);
+		pSpace->destroy(0, false);
+	}
 
 	spaces_.clear();
 }
@@ -65,6 +70,9 @@ bool Spaces::destroySpace(SPACE_ID spaceID, ENTITY_ID entityID)
 	INFO_MSG(fmt::format("Spaces::destroySpace: {}.\n", spaceID));
 
 	Space* pSpace = Spaces::findSpace(spaceID);
+	if(!pSpace)
+		return true;
+	
 	if(pSpace->isDestroyed())
 		return true;
 

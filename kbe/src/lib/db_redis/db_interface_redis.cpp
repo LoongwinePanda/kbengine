@@ -2,7 +2,7 @@
 This source file is part of KBEngine
 For the latest info, see http://www.kbengine.org/
 
-Copyright (c) 2008-2017 KBEngine.
+Copyright (c) 2008-2018 KBEngine.
 
 KBEngine is free software: you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
@@ -50,6 +50,7 @@ bool DBInterfaceRedis::initInterface(DBInterface* pdbi)
 	EntityTables& entityTables = EntityTables::findByInterfaceName(pdbi->name());
 
 	entityTables.addKBETable(new KBEAccountTableRedis(&entityTables));
+	entityTables.addKBETable(new KBEServerLogTableRedis(&entityTables));
 	entityTables.addKBETable(new KBEEntityLogTableRedis(&entityTables));
 	entityTables.addKBETable(new KBEEmailVerificationTableRedis(&entityTables));
 	return true;
@@ -450,9 +451,11 @@ void DBInterfaceRedis::write_query_result(redisReply* pRedisReply, MemoryStream 
 	{
 		uint32 nfields = 0;
 		uint64 affectedRows = 0;
+		uint64 lastInsertID = 0;
 
 		(*result) << nfields;
 		(*result) << affectedRows;
+		(*result) << lastInsertID;
 	}
 }
 
@@ -491,11 +494,11 @@ void DBInterfaceRedis::write_query_result_element(redisReply* pRedisReply, Memor
 //-------------------------------------------------------------------------------------
 const char* DBInterfaceRedis::c_str()
 {
-	static char strdescr[MAX_BUF];
-	kbe_snprintf(strdescr, MAX_BUF, "interface=%s, dbtype=redis, ip=%s, port=%u, currdatabase=%s, username=%s, connected=%s.\n", 
-		name_, db_ip_, db_port_, db_name_, db_username_, pRedisContext_ == NULL ? "no" : "yes");
+	static std::string strdescr;
+	strdescr = fmt::format("interface={}, dbtype=redis, ip={}, port={}, currdatabase={}, username={}, connected={}.\n",
+		name_, db_ip_, db_port_, db_name_, db_username_, (pRedisContext_ == NULL ? "no" : "yes"));
 
-	return strdescr;
+	return strdescr.c_str();
 }
 
 //-------------------------------------------------------------------------------------

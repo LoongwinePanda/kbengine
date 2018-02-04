@@ -2,7 +2,7 @@
 This source file is part of KBEngine
 For the latest info, see http://www.kbengine.org/
 
-Copyright (c) 2008-2017 KBEngine.
+Copyright (c) 2008-2018 KBEngine.
 
 KBEngine is free software: you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
@@ -167,6 +167,7 @@ bool DBInterfaceMysql::initInterface(DBInterface* pdbi)
 	EntityTables& entityTables = EntityTables::findByInterfaceName(pdbi->name());
 
 	entityTables.addKBETable(new KBEAccountTableMysql(&entityTables));
+	entityTables.addKBETable(new KBEServerLogTableMysql(&entityTables));
 	entityTables.addKBETable(new KBEEntityLogTableMysql(&entityTables));
 	entityTables.addKBETable(new KBEEmailVerificationTableMysql(&entityTables));
 	return true;
@@ -193,7 +194,7 @@ bool DBInterfaceMysql::attach(const char* databaseName)
 		pMysql_ = mysql_init(0);
 		if(pMysql_ == NULL)
 		{
-			ERROR_MSG("DBInterfaceMysql::attach: mysql_init is error!\n");
+			ERROR_MSG("DBInterfaceMysql::attach: mysql_init error!\n");
 			return false;
 		}
 		
@@ -227,7 +228,7 @@ __RECONNECT:
 				pMysql_ = mysql_init(0);
 				if (pMysql_ == NULL)
 				{
-					ERROR_MSG("DBInterfaceMysql::attach: mysql_init is error!\n");
+					ERROR_MSG("DBInterfaceMysql::attach: mysql_init error!\n");
 					return false;
 				}
 
@@ -257,7 +258,7 @@ __RECONNECT:
 
 		if (mysql_set_character_set(mysql(), characterSet_.c_str()) != 0)
 		{
-			ERROR_MSG("DBInterfaceMysql::attach: Could not set client connection character set to UTF-8\n" );
+			ERROR_MSG(fmt::format("DBInterfaceMysql::attach: Could not set client connection character set to {}\n", characterSet_));
 			return false;
 		}
 
@@ -294,7 +295,7 @@ bool DBInterfaceMysql::checkEnvironment()
 	std::string querycmd = "SHOW VARIABLES";
 	if(!query(querycmd.c_str(), querycmd.size(), true))
 	{
-		ERROR_MSG(fmt::format("DBInterfaceMysql::checkEnvironment: {}, query is error!\n", querycmd));
+		ERROR_MSG(fmt::format("DBInterfaceMysql::checkEnvironment: {}, query error!\n", querycmd));
 		return false;
 	}
 
@@ -425,8 +426,8 @@ bool DBInterfaceMysql::dropEntityTableFromDB(const char* tableName)
   
 	DEBUG_MSG(fmt::format("DBInterfaceMysql::dropEntityTableFromDB: {}.\n", tableName));
 
-	char sql_str[MAX_BUF];
-	kbe_snprintf(sql_str, MAX_BUF, "Drop table if exists %s;", tableName);
+	char sql_str[SQL_BUF];
+	kbe_snprintf(sql_str, SQL_BUF, "Drop table if exists %s;", tableName);
 	return query(sql_str, strlen(sql_str));
 }
 
@@ -438,8 +439,8 @@ bool DBInterfaceMysql::dropEntityTableItemFromDB(const char* tableName, const ch
 	DEBUG_MSG(fmt::format("DBInterfaceMysql::dropEntityTableItemFromDB: {} {}.\n", 
 		tableName, tableItemName));
 
-	char sql_str[MAX_BUF];
-	kbe_snprintf(sql_str, MAX_BUF, "alter table %s drop column %s;", tableName, tableItemName);
+	char sql_str[SQL_BUF];
+	kbe_snprintf(sql_str, SQL_BUF, "alter table %s drop column %s;", tableName, tableItemName);
 	return query(sql_str, strlen(sql_str));
 }
 
@@ -450,7 +451,7 @@ bool DBInterfaceMysql::query(const char* cmd, uint32 size, bool printlog, Memory
 	{
 		if(printlog)
 		{
-			ERROR_MSG(fmt::format("DBInterfaceMysql::query: has no attach(db).sql:({})\n", lastquery_));
+			ERROR_MSG(fmt::format("DBInterfaceMysql::query: has no attach(db)!\nsql:({})\n", lastquery_));
 		}
 
 		if(result)
@@ -523,7 +524,7 @@ bool DBInterfaceMysql::write_query_result(MemoryStream * result)
 			{
 				if (arow[i] == NULL)
 				{
-					result->appendBlob("NULL", strlen("NULL"));
+					result->appendBlob("KBE_QUERY_DB_NULL", strlen("KBE_QUERY_DB_NULL"));
 				}
 				else
 				{
@@ -538,12 +539,17 @@ bool DBInterfaceMysql::write_query_result(MemoryStream * result)
 	{
 		uint32 nfields = 0;
 		uint64 affectedRows = 0;
+		uint64 lastInsertID = 0;
 		
 		if(mysql())
+		{
 			affectedRows = mysql()->affected_rows;
+			lastInsertID = mysql_insert_id(mysql());
+		}
 		
 		(*result) << nfields;
 		(*result) << affectedRows;
+		(*result) << lastInsertID;
 	}
 
 	return true;
@@ -554,7 +560,7 @@ bool DBInterfaceMysql::getTableNames(std::vector<std::string>& tableNames, const
 {
 	if(pMysql_ == NULL)
 	{
-		ERROR_MSG("DBInterfaceMysql::query: has no attach(db).\n");
+		ERROR_MSG("DBInterfaceMysql::getTableNames: has no attach(db).\n");
 		return false;
 	}
 
@@ -603,11 +609,11 @@ bool DBInterfaceMysql::getTableItemNames(const char* tableName, std::vector<std:
 //-------------------------------------------------------------------------------------
 const char* DBInterfaceMysql::c_str()
 {
-	static char strdescr[MAX_BUF];
-	kbe_snprintf(strdescr, MAX_BUF, "interface=%s, dbtype=mysql, ip=%s, port=%u, currdatabase=%s, username=%s, connected=%s.\n", 
-		name_, db_ip_, db_port_, db_name_, db_username_, pMysql_ == NULL ? "no" : "yes");
+	static std::string strdescr;
+	strdescr = fmt::format("interface={}, dbtype=mysql, ip={}, port={}, currdatabase={}, username={}, connected={}.\n",
+		name_, db_ip_, db_port_, db_name_, db_username_, (pMysql_ == NULL ? "no" : "yes"));
 
-	return strdescr;
+	return strdescr.c_str();
 }
 
 //-------------------------------------------------------------------------------------
@@ -631,7 +637,7 @@ void DBInterfaceMysql::getFields(TABLE_FIELDS& outs, const char* tableName)
 	MYSQL_RES*	result = mysql_list_fields(mysql(), sqlname.c_str(), NULL);
 	if(result == NULL)
 	{
-		ERROR_MSG(fmt::format("EntityTableMysql::loadFields:{}\n", getstrerror()));
+		ERROR_MSG(fmt::format("EntityTableMysql::getFields:{}\n", getstrerror()));
 		return;
 	}
 
